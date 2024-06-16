@@ -1,0 +1,119 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract StudentRegistry {
+    struct Document {
+        uint256 documentId;
+        string documentHash;
+        string documentInfo;
+        bool status; // Status indicating whether the document is verified or not
+        bool exists;
+        bool selected; // Indicates if the document is selected for application
+    }
+
+    struct Student {
+        uint256 studentId;
+        string name;
+        string email;
+        uint256 instituteId; // Foreign key referencing Institute
+        bool registered;
+        address studentAddress; // Address of the student
+        mapping(uint256 => Document) documents;
+    }
+
+    struct Institute {
+        uint256 instituteId; // Primary key
+        string name;
+        string email;
+        address instituteAddress; // Address of the institute
+        bool registered;
+    }
+
+    mapping(uint256 => Student) public students;
+    mapping(uint256 => Institute) public institutes;
+
+    modifier onlyRegisteredInstitute(uint256 _instituteId) {
+        require(msg.sender == institutes[_instituteId].instituteAddress, "Not authorized.");
+        _;
+    }
+
+    modifier onlyRegisteredStudent(uint256 _studentId) {
+        require(msg.sender == students[_studentId].studentAddress, "Not authorized.");
+        _;
+    }
+
+    modifier onlyInstitute(uint256 _instituteId) {
+        require(institutes[_instituteId].instituteAddress == msg.sender, "Not authorized.");
+        require(institutes[_instituteId].registered, "Institute not registered."); // Fixing the condition to ensure institute is registered
+        _;
+    }
+
+    modifier onlyUnregisteredInstitute(uint256 _instituteId) {
+        require(!institutes[_instituteId].registered, "Institute already registered.");
+        _;
+    }
+
+    event DocumentVerified(uint256 indexed studentId, uint256 indexed documentId);
+    event Debug(string message); // Debug event for logging
+    //event StudentApplied(uint256 indexed studentId, uint256 indexed documentId, uint256 indexed instituteId);
+    //event ApplicationAccepted(uint256 indexed studentId, uint256 indexed documentId, uint256 indexed instituteId);
+
+    function registerStudent(uint256 _studentId, string memory _name, string memory _email, uint256 _instituteId, address _studentAddress) public onlyInstitute(_instituteId) {
+        require(!students[_studentId].registered, "Student already registered.");
+        require(institutes[_instituteId].registered, "Institute does not exist."); // Ensure institute exists
+
+        Student storage newStudent = students[_studentId];
+        newStudent.studentId = _studentId;
+        newStudent.name = _name;
+        newStudent.email = _email;
+        newStudent.instituteId = _instituteId;
+        newStudent.registered = true;
+        newStudent.studentAddress = _studentAddress; // Set the student's address
+        emit Debug("Student registered successfully"); // Debug event
+    }
+
+    function getStudent(uint256 _studentId) public view returns (string memory, string memory, uint256, address) {
+        require(students[_studentId].registered, "Student not registered.");
+        return (
+            students[_studentId].name,
+            students[_studentId].email,
+            students[_studentId].instituteId,
+            students[_studentId].studentAddress
+        );
+    }
+
+    function registerInstitute(uint256 _instituteId, string memory _name, string memory _email, address _instituteAddress) public onlyUnregisteredInstitute(_instituteId) {
+        institutes[_instituteId] = Institute(_instituteId, _name, _email, _instituteAddress, true);
+        emit Debug("Institute registered successfully"); // Debug event
+    }
+
+    function getInstitute(uint256 _instituteId) public view returns (string memory, string memory, address) {
+        require(institutes[_instituteId].registered, "Institute not registered.");
+        return (
+            institutes[_instituteId].name,
+            institutes[_instituteId].email,
+            institutes[_instituteId].instituteAddress
+        );
+    }
+
+    function addDocument(uint256 _studentId, uint256 _documentId, string memory _documentHash, string memory _documentInfo) public onlyRegisteredStudent(_studentId) {
+        require(students[_studentId].registered, "Student not registered.");
+        students[_studentId].documents[_documentId] = Document(_documentId, _documentHash, _documentInfo, false, true, false);
+    }
+
+    function getDocument(uint256 _studentId, uint256 _documentId) public view returns (string memory, string memory, bool) {
+        require(students[_studentId].registered, "Student not registered.");
+        require(students[_studentId].documents[_documentId].exists, "Document does not exist.");
+        return (
+            students[_studentId].documents[_documentId].documentHash,
+            students[_studentId].documents[_documentId].documentInfo,
+            students[_studentId].documents[_documentId].status
+        );
+    }
+
+    function verifyDocument(uint256 _studentId, uint256 _documentId) public onlyRegisteredInstitute(students[_studentId].instituteId) {
+        require(students[_studentId].documents[_documentId].exists, "Document does not exist.");
+        students[_studentId].documents[_documentId].status = true; // Set status to true upon verification
+        emit DocumentVerified(_studentId, _documentId);
+    }
+}
